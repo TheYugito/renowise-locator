@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Renowise Locator</title>
+
+  <!-- PWA / iOS home-screen (PRD Appendix D) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Renowise Locator" />
+  <meta name="theme-color" content="#0B2447" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="icon" href="icons/favicon.png" sizes="any" />
+
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Top bar -->
+    <header id="topbar">
+      <button id="home-btn" class="icon-btn" data-i18n-attr="title:fit_home;aria-label:fit_home"
+              title="Whole of Belgium" aria-label="Whole of Belgium">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 3 3 10.5V21h6v-6h6v6h6V10.5L12 3Z"/></svg>
+      </button>
+
+      <div class="search-wrap">
+        <svg class="search-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search" type="search" autocomplete="off" autocorrect="off"
+               spellcheck="false" inputmode="search"
+               data-i18n-attr="placeholder:search_placeholder"
+               placeholder="Search postcode or town" />
+        <button id="search-clear" class="search-clear" type="button" hidden
+                data-i18n-attr="aria-label:clear_search;title:clear_search"
+                aria-label="Clear search" title="Clear search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <ul id="search-results" class="search-results" hidden></ul>
+      </div>
+
+      <div id="lang-switch" class="lang-switch" role="group" aria-label="Language">
+        <span class="lang-thumb" aria-hidden="true"></span>
+        <button data-lang="en" class="lang-btn">EN</button>
+        <button data-lang="nl" class="lang-btn">NL</button>
+        <button data-lang="fr" class="lang-btn">FR</button>
+      </div>
+    </header>
+
+    <!-- Map -->
+    <main id="map" aria-label="Map of Belgium"></main>
+
+    <!-- One-time first-run hint -->
+    <div id="first-hint" class="first-hint" hidden>
+      <svg class="first-hint-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+      <span data-i18n="first_hint">Tap postcode areas on the map to add them — up to 10.</span>
+      <button id="first-hint-close" class="first-hint-close" type="button" aria-label="Dismiss">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <!-- Right panel (landscape) / bottom sheet (portrait) -->
+    <aside id="panel" class="panel">
+      <div id="sheet-handle" class="sheet-handle" role="button" tabindex="0" aria-label="Expand or collapse the list">
+        <span class="sheet-grip"></span>
+        <svg class="sheet-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 14l4-4 4 4"/></svg>
+      </div>
+
+      <div class="panel-header">
+        <label class="field">
+          <span class="field-label" data-i18n="name_label">Subcontractor</span>
+          <input id="name-input" type="text" autocomplete="off"
+                 data-i18n-attr="placeholder:name_placeholder" placeholder="Name…" />
+        </label>
+
+        <div class="header-meta">
+          <label class="field date-field">
+            <span class="field-label" data-i18n="date_label">Date</span>
+            <input id="date-input" type="date" />
+          </label>
+          <div id="counter" class="counter" aria-live="polite">0 / 10</div>
+        </div>
+
+        <div id="provinces-line" class="provinces-line">
+          <span class="provinces-label" data-i18n="provinces_label">Provinces</span>
+          <span id="provinces-value" class="provinces-value">—</span>
+        </div>
+      </div>
+
+      <div class="panel-scroll">
+        <div class="panel-list-wrap">
+          <div id="empty-hint" class="empty-hint">
+            <svg class="empty-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z"/><circle cx="12" cy="10" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+            <span data-i18n="empty_hint">Tap postcodes on the map to add them.</span>
+          </div>
+          <ul id="list" class="sel-list"></ul>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button id="copy-btn" class="btn" title="Copy">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+          <span data-i18n="copy">Copy</span>
+        </button>
+        <button id="share-btn" class="btn" title="Share">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8 7.5 12 3.5l4 4"/><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7"/></svg>
+          <span data-i18n="share">Share</span>
+        </button>
+        <button id="save-btn" class="btn" title="Save">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/></svg>
+          <span data-i18n="save">Save</span>
+        </button>
+        <button id="saved-btn" class="btn" title="Saved">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round"/></svg>
+          <span data-i18n="saved">Saved</span>
+        </button>
+        <button id="reset-btn" class="btn btn-danger" title="Reset">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.5-5.8" stroke-linecap="round"/><path d="M4 4v4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="reset">Reset</span>
+        </button>
+        <button id="export-btn" class="btn btn-primary" title="Export">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 11v6"/><path d="M9.5 14.5 12 17l2.5-2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="export">Export</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Offline chip -->
+    <div id="offline-chip" class="offline-chip" hidden>
+      <span class="dot"></span><span data-i18n="offline">Offline — using cached map</span>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+
+  <!-- Modal host (Saved…, confirm, rename) -->
+  <div id="modal-root" class="modal-root" hidden></div>
+
+  <!-- Leaflet (bundled locally, classic script → global L) then the app module -->
+  <script src="vendor/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

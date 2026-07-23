@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- §14: navy rounded-square, cream map-pin holding a simplified Belgium
+       silhouette, faint periwinkle postcode grid behind. Flat, no text. -->
+  <rect width="512" height="512" fill="#0B2447"/>
+
+  <!-- faint periwinkle postcode grid -->
+  <g stroke="#DCE3F1" stroke-width="2" opacity="0.10">
+    <path d="M96 0V512 M160 0V512 M224 0V512 M288 0V512 M352 0V512 M416 0V512"/>
+    <path d="M0 96H512 M0 160H512 M0 224H512 M0 288H512 M0 352H512 M0 416H512"/>
+  </g>
+
+  <!-- pin drop shadow -->
+  <ellipse cx="256" cy="404" rx="46" ry="14" fill="#000000" opacity="0.18"/>
+
+  <!-- map pin (cream): round head + tapering tail -->
+  <path d="M200 252 L256 396 L312 252 Z" fill="#FFFBF9"/>
+  <circle cx="256" cy="200" r="98" fill="#FFFBF9"/>
+
+  <!-- pin hole (periwinkle disc) -->
+  <circle cx="256" cy="200" r="52" fill="#DCE3F1"/>
+
+  <!-- simplified Belgium silhouette (navy) inside the hole -->
+  <path fill="#0B2447" d="M232 178 L250 168 L267 170 L286 185 L293 205
+    L281 224 L263 233 L245 227 L230 213 L224 194 Z"/>
+</svg>
