@@ -1,5 +1,5 @@
 // app.js — Renowise Locator
-// Map, postcode selection (hard cap 10), self-documenting panel, i18n, offline,
+// Map, postcode selection (cap, default 10, adjustable), self-documenting panel, i18n, offline,
 // and the Renowise-ready export. Selection (a set of postcode codes) is the single
 // source of truth; map polygons and list rows are two-way synced. See PRD §7.
 
@@ -7,7 +7,11 @@ import { provinceForPostcode, summarizeProvinces, provinceName } from './provinc
 import { resolveInitialLang, getLang, setLang, t } from './i18n.js';
 
 /* ------------------------------------------------------------------ config */
-const MAX = 10;
+// PRD §7.2 fixed this at 10; it is now an operator-adjustable setting that
+// defaults to 10. Everything downstream reads MAX, and the Appendix A strings
+// already interpolate {max}, so nothing else needs to know.
+const DEFAULT_MAX = 10;
+let MAX = DEFAULT_MAX;
 // Built in initMap(), not at module scope: touching L here would throw during
 // import if Leaflet failed to load, killing the module before it can report why.
 const BE_BOUNDS_LL = [[49.49, 2.55], [51.51, 6.41]];
@@ -16,6 +20,7 @@ const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const STORE_SAVED = 'renowise.locator.saved';
 const STORE_LAST = 'renowise.locator.last';
 const STORE_HINT = 'renowise.locator.seenHint';
+const STORE_MAX = 'renowise.locator.max';
 
 const STYLE_UNSELECTED = { color: '#0B2447', weight: 0.6, opacity: 0.35, fill: true, fillColor: '#0B2447', fillOpacity: 0 };
 const STYLE_SELECTED   = { color: '#0B2447', weight: 2,   opacity: 1,    fill: true, fillColor: '#0B2447', fillOpacity: 0.35 };
@@ -90,7 +95,7 @@ function toggle(pc) {
     restyle(pc);
     removeLabel(pc);
   } else {
-    if (selected.length >= MAX) {           // hard cap — reject the 11th (PRD §7.2)
+    if (selected.length >= MAX) {           // cap — reject the tap past the limit (PRD §7.2)
       showToast(t('cap_reached', { max: MAX }), 'warn');
       return;
     }
@@ -460,7 +465,8 @@ function openSaved() {
       const li = document.createElement('li'); li.className = 'saved-item';
       const title = document.createElement('div'); title.className = 'title'; title.textContent = rec.name || '—';
       const meta = document.createElement('div'); meta.className = 'meta';
-      meta.textContent = `${rec.date} · ${rec.postcodes.length} / ${MAX}`;
+      // count only — the limit is now adjustable, so "12 / 8" could read as broken
+      meta.textContent = `${rec.date} · ${rec.postcodes.length}`;
       const rowActions = document.createElement('div'); rowActions.className = 'row-actions';
       rowActions.append(
         mkBtn(t('load'), 'btn-primary', () => {
@@ -618,6 +624,93 @@ function resetSheet() { els.panel.style.removeProperty('--sheet-y'); els.panel.c
 /* ------------------------------------------------------ online/offline */
 function updateOnline() { els.offlineChip.hidden = navigator.onLine; }
 
+/* ------------------------------------------- adjustable postcode limit */
+// No fixed ceiling was requested, so the only bound is reality: you cannot
+// select more postcodes than exist. Before the data loads, fall back to a
+// sane number and re-clamp once the layers are built.
+const hardCeiling = () => layersByPostcode.size || 1000;
+const clampMax = (n) => Math.max(1, Math.min(hardCeiling(), Math.round(Number(n)) || 1));
+
+function loadMax() {
+  try {
+    const v = parseInt(localStorage.getItem(STORE_MAX), 10);
+    if (Number.isFinite(v) && v >= 1) MAX = v;
+  } catch (_) {}
+}
+function setMax(n) {
+  MAX = clampMax(n);
+  try { localStorage.setItem(STORE_MAX, String(MAX)); } catch (_) {}
+  syncUI();
+}
+
+// Lowering the limit below the current selection trims the most recently added
+// (selected is in tap order) after confirming, with Undo — same contract as
+// Reset and Delete.
+function applyMax(n) {
+  const next = clampMax(n);
+  if (next === MAX) return;
+  if (next < selected.length) {
+    const prevMax = MAX, prevSel = [...selected];
+    confirmDialog(t('max_confirm', { max: next }), t('apply'), () => {
+      const keep = selected.slice(0, next);
+      setMax(next);
+      applySelection(keep);
+      showToast(t('max_updated', { max: next }), 'info', {
+        label: t('undo'),
+        onClick: () => { setMax(prevMax); applySelection(prevSel); }
+      });
+    }, true, openMaxPicker);
+    return;
+  }
+  setMax(next);
+  showToast(t('max_updated', { max: next }), 'info');
+}
+
+function openMaxPicker() {
+  const { modal, body, actions } = modalShell(t('max_label'));
+  const PRESETS = [5, 10, 15, 20, 30, 50];
+  let value = MAX;
+
+  const row = document.createElement('div'); row.className = 'max-row';
+  const dec = document.createElement('button'); dec.type = 'button'; dec.className = 'max-step'; dec.textContent = '−';
+  dec.setAttribute('aria-label', '-1');
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = '1'; inp.inputMode = 'numeric'; inp.value = String(value);
+  inp.setAttribute('aria-label', t('max_label'));
+  const inc = document.createElement('button'); inc.type = 'button'; inc.className = 'max-step'; inc.textContent = '+';
+  inc.setAttribute('aria-label', '+1');
+  row.append(dec, inp, inc);
+
+  const presets = document.createElement('div'); presets.className = 'max-presets';
+  const chips = PRESETS.map((n) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'max-preset'; b.textContent = String(n);
+    b.addEventListener('click', () => set(n));
+    return b;
+  });
+  presets.append(...chips);
+
+  const note = document.createElement('p'); note.className = 'max-note';
+
+  function set(n) {
+    value = clampMax(n);
+    if (inp.value !== String(value)) inp.value = String(value);
+    chips.forEach((c, i) => c.classList.toggle('active', PRESETS[i] === value));
+    note.textContent = value < selected.length ? t('max_confirm', { max: value }) : '';
+  }
+  dec.addEventListener('click', () => set(value - 1));
+  inc.addEventListener('click', () => set(value + 1));
+  inp.addEventListener('input', () => { const v = parseInt(inp.value, 10); if (Number.isFinite(v)) set(v); });
+  set(value);
+
+  body.append(row, presets, note);
+  actions.append(
+    mkBtn(t('cancel'), '', closeModal),
+    mkBtn(t('apply'), 'btn-primary', () => { closeModal(); applyMax(value); })
+  );
+  openModal(modal);
+}
+
 /* -------------------------------------------------- first-run hint */
 function maybeShowHint() {
   let seen = false;
@@ -700,6 +793,8 @@ function wireEvents() {
 
   els.langBtns.forEach((b) => b.addEventListener('click', () => { setLang(b.dataset.lang); applyI18n(); }));
 
+  els.counter.addEventListener('click', openMaxPicker);
+
   els.search.addEventListener('input', onSearchInput);
   els.search.addEventListener('focus', onSearchInput);
   els.searchClear.addEventListener('click', () => {
@@ -739,6 +834,7 @@ function wireEvents() {
 async function init() {
   resolveInitialLang();
   cacheEls();
+  loadMax();
   if (typeof L === 'undefined') {          // bundled Leaflet missing/blocked
     showToast('Map library failed to load', 'warn');
     return;
@@ -753,6 +849,7 @@ async function init() {
   try {
     const [data, locs] = await Promise.all([loadData(), loadLocalities()]);
     buildLayer(data);
+    MAX = clampMax(MAX);          // ceiling is now known
     localities = locs;
     buildSearchIndex();
     restoreLast();

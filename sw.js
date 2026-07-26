@@ -4,7 +4,7 @@
             same-origin → CacheFirst, falling back to network
    Selection works fully offline; only unseen tiles need the network. */
 
-const VERSION = 'v12';
+const VERSION = 'v13';
 const SHELL_CACHE = 'renowise-shell-' + VERSION;
 const TILE_CACHE = 'renowise-tiles-' + VERSION;
 const TILE_CAP = 1500;

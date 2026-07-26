@@ -27,7 +27,10 @@ export const STRINGS = {
     first_hint: "Tap postcodes on the map — max 10.",
     delete_confirm: "Delete this saved selection?", deleted: "Deleted",
     no_saved: "No saved selections yet.",
-    toggle_list: "Expand or collapse the list", dismiss: "Dismiss"
+    toggle_list: "Expand or collapse the list", dismiss: "Dismiss",
+    max_label: "Max postcodes", max_hint: "Tap the counter to change this.",
+    max_confirm: "Keep only the first {max} postcodes?",
+    max_updated: "Limit set to {max}", apply: "Apply"
   },
   nl: {
     app_title: "Renowise Locator",
@@ -53,7 +56,10 @@ export const STRINGS = {
     first_hint: "Tik postcodes op de kaart — max. 10.",
     delete_confirm: "Deze bewaarde selectie verwijderen?", deleted: "Verwijderd",
     no_saved: "Nog geen bewaarde selecties.",
-    toggle_list: "Lijst openen of sluiten", dismiss: "Sluiten"
+    toggle_list: "Lijst openen of sluiten", dismiss: "Sluiten",
+    max_label: "Max. postcodes", max_hint: "Tik op de teller om dit te wijzigen.",
+    max_confirm: "Alleen de eerste {max} postcodes behouden?",
+    max_updated: "Limiet op {max} gezet", apply: "Toepassen"
   },
   fr: {
     app_title: "Renowise Locator",
@@ -79,7 +85,10 @@ export const STRINGS = {
     first_hint: "Touchez les codes postaux — 10 max.",
     delete_confirm: "Supprimer cette sélection enregistrée ?", deleted: "Supprimé",
     no_saved: "Aucune sélection enregistrée.",
-    toggle_list: "Ouvrir ou fermer la liste", dismiss: "Fermer"
+    toggle_list: "Ouvrir ou fermer la liste", dismiss: "Fermer",
+    max_label: "Codes postaux max.", max_hint: "Touchez le compteur pour le modifier.",
+    max_confirm: "Ne garder que les {max} premiers codes postaux ?",
+    max_updated: "Limite fixée à {max}", apply: "Appliquer"
   }
 };
 
