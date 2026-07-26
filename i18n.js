@@ -24,7 +24,7 @@ export const STRINGS = {
     offline: "Offline — using cached map",
     undo: "Undo", cleared: "Selection cleared",
     clear_search: "Clear search",
-    first_hint: "Tap postcode areas on the map to add them — up to 10.",
+    first_hint: "Tap postcodes on the map — max 10.",
     delete_confirm: "Delete this saved selection?", deleted: "Deleted",
     no_saved: "No saved selections yet.",
     toggle_list: "Expand or collapse the list", dismiss: "Dismiss"
@@ -50,7 +50,7 @@ export const STRINGS = {
     offline: "Offline — opgeslagen kaart",
     undo: "Ongedaan maken", cleared: "Selectie gewist",
     clear_search: "Zoekopdracht wissen",
-    first_hint: "Tik postcodegebieden op de kaart aan om ze toe te voegen — max. 10.",
+    first_hint: "Tik postcodes op de kaart — max. 10.",
     delete_confirm: "Deze bewaarde selectie verwijderen?", deleted: "Verwijderd",
     no_saved: "Nog geen bewaarde selecties.",
     toggle_list: "Lijst openen of sluiten", dismiss: "Sluiten"
@@ -76,7 +76,7 @@ export const STRINGS = {
     offline: "Hors ligne — carte en cache",
     undo: "Annuler", cleared: "Sélection effacée",
     clear_search: "Effacer la recherche",
-    first_hint: "Touchez des zones de code postal sur la carte pour les ajouter — 10 max.",
+    first_hint: "Touchez les codes postaux — 10 max.",
     delete_confirm: "Supprimer cette sélection enregistrée ?", deleted: "Supprimé",
     no_saved: "Aucune sélection enregistrée.",
     toggle_list: "Ouvrir ou fermer la liste", dismiss: "Fermer"

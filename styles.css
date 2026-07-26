@@ -336,24 +336,27 @@ button { cursor: pointer; }
 /* ---------- First-run hint ---------- */
 .first-hint {
   position: fixed; z-index: 1350;
-  top: calc(var(--topbar-h) + var(--safe-top) + 14px);
-  left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 10px;
-  max-width: min(92vw, 470px);
+  top: calc(var(--topbar-h) + var(--safe-top) + 10px);
+  /* Centred via auto margins inside a full-width inset — NOT `left: 50%`, which
+     caps a shrink-to-fit box at 50vw and wrapped this to five lines on a phone. */
+  left: 10px; right: 10px; margin-inline: auto;
+  width: fit-content; max-width: min(94vw, 420px);
+  display: flex; align-items: center; gap: 8px;
   background: var(--ivory); color: var(--ink);
-  padding: 10px 10px 10px 14px; border-radius: 999px;
+  padding: 7px 7px 7px 12px; border-radius: 999px;
   box-shadow: var(--shadow-md); border: 1px solid var(--line);
-  font-size: 14px; line-height: 1.35;
-  animation: toast-in .2s ease-out;
+  font-size: 13px; line-height: 1.3;
+  animation: hint-in .2s ease-out;
 }
-.first-hint-ico { flex: 0 0 auto; width: 22px; height: 22px; color: var(--navy); }
+@keyframes hint-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.first-hint-ico { flex: 0 0 auto; width: 18px; height: 18px; color: var(--navy); }
 .first-hint span { flex: 1 1 auto; }
 .first-hint-close {
-  flex: 0 0 auto; width: 28px; height: 28px; padding: 0; border: none;
+  flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: none;
   background: rgba(11,36,71,.08); color: var(--muted); border-radius: 50%;
   display: grid; place-items: center;
 }
-.first-hint-close svg { width: 15px; height: 15px; }
+.first-hint-close svg { width: 13px; height: 13px; }
 .first-hint-close:active { background: rgba(11,36,71,.16); color: var(--navy); }
 
 /* ---------- Modal (Saved…, confirm, rename) ---------- */
