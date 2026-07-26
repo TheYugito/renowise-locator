@@ -547,7 +547,7 @@ function applyI18n() {
 function initSheet() {
   const handle = els.sheetHandle, panel = els.panel;
   const header = panel.querySelector('.panel-header');
-  const PEEK = 62, OPEN = 0;
+  const PEEK = 72, OPEN = 0;   // keep in sync with the --sheet-y fallback in styles.css
   const now = () => (window.performance && performance.now ? performance.now() : Date.now());
   let startY = 0, startPct = PEEK, dragging = false, moved = 0, H = 0, fromHandle = false;
   let lastY = 0, lastT = 0, vel = 0;

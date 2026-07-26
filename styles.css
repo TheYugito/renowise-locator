@@ -401,7 +401,8 @@ button { cursor: pointer; }
     border-left: none;
     border-top-left-radius: 20px; border-top-right-radius: 20px;
     box-shadow: 0 -10px 34px rgba(11,36,71,.22);
-    transform: translateY(var(--sheet-y, 62%));
+    /* 72% down = a ~150px strip (handle + name/counter row + action row). */
+    transform: translateY(var(--sheet-y, 72%));
     transition: transform .28s cubic-bezier(.22,.61,.36,1);
     padding-right: 0;
   }
@@ -424,6 +425,58 @@ button { cursor: pointer; }
   .panel.dragging .panel-header { cursor: grabbing; }
   .panel-actions { order: 2; border-top: none; border-bottom: 1px solid var(--line); }
   .panel-scroll { order: 3; }
+
+  /* Collapsed = a thin strip, so the map keeps the screen. Name + counter share
+     one row and the actions become a single icon row; the field labels, the date
+     and the provinces summary only appear once the sheet is expanded. */
+  .panel:not(.expanded) .field-label,
+  .panel:not(.expanded) .date-field,
+  .panel:not(.expanded) .provinces-line { display: none; }
+
+  .panel:not(.expanded) .panel-header {
+    flex-direction: row; align-items: center; gap: 10px;
+    padding: 2px 14px 8px;
+  }
+  .panel:not(.expanded) .field { flex: 1 1 auto; min-width: 0; }
+  .panel:not(.expanded) #name-input { height: 40px; font-size: 16px; }
+  .panel:not(.expanded) .header-meta { flex: 0 0 auto; }
+  .panel:not(.expanded) .counter { height: 40px; min-width: 66px; padding: 0 10px; font-size: 16px; }
+
+  .panel:not(.expanded) .panel-actions {
+    grid-template-columns: repeat(6, 1fr); gap: 6px;
+    padding: 8px 12px 10px;
+  }
+  /* Targeted by id on purpose: #reset-btn/#export-btn set `grid-column: span 2`
+     and a larger font, and an id beats any class selector — a .btn rule here
+     would lose, leaving the actions wrapped onto a second row and clipped. */
+  .panel:not(.expanded) .panel-actions #copy-btn,
+  .panel:not(.expanded) .panel-actions #share-btn,
+  .panel:not(.expanded) .panel-actions #save-btn,
+  .panel:not(.expanded) .panel-actions #saved-btn,
+  .panel:not(.expanded) .panel-actions #reset-btn,
+  .panel:not(.expanded) .panel-actions #export-btn {
+    grid-column: auto;
+    flex-direction: column; gap: 3px;
+    min-height: 50px; font-size: 10px; font-weight: 600; padding: 0 2px;
+  }
+  .panel:not(.expanded) .panel-actions .ico { width: 19px; height: 19px; }
+  .panel:not(.expanded) .sheet-handle { height: 30px; }
+}
+
+/* Portrait on a tablet: keep the single compact row, but scale it up so six
+   buttons across ~1000px don't read as huge tiles with tiny labels. */
+@media (orientation: portrait) and (min-width: 700px) {
+  .panel:not(.expanded) .panel-actions #copy-btn,
+  .panel:not(.expanded) .panel-actions #share-btn,
+  .panel:not(.expanded) .panel-actions #save-btn,
+  .panel:not(.expanded) .panel-actions #saved-btn,
+  .panel:not(.expanded) .panel-actions #reset-btn,
+  .panel:not(.expanded) .panel-actions #export-btn {
+    min-height: 58px; font-size: 13px; gap: 5px;
+  }
+  .panel:not(.expanded) .panel-actions .ico { width: 23px; height: 23px; }
+  .panel:not(.expanded) #name-input,
+  .panel:not(.expanded) .counter { height: 44px; font-size: 17px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
