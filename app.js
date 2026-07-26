@@ -8,7 +8,10 @@ import { resolveInitialLang, getLang, setLang, t } from './i18n.js';
 
 /* ------------------------------------------------------------------ config */
 const MAX = 10;
-const BE_BOUNDS = L.latLngBounds([[49.49, 2.55], [51.51, 6.41]]);
+// Built in initMap(), not at module scope: touching L here would throw during
+// import if Leaflet failed to load, killing the module before it can report why.
+const BE_BOUNDS_LL = [[49.49, 2.55], [51.51, 6.41]];
+let BE_BOUNDS = null;
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const STORE_SAVED = 'renowise.locator.saved';
 const STORE_LAST = 'renowise.locator.last';
@@ -27,6 +30,7 @@ const layersByPostcode = new Map();  // pc -> [leaflet layers]
 const metaByPostcode = new Map();    // pc -> { nl, fr, province }
 const labelByPostcode = new Map();   // pc -> leaflet layer carrying the tooltip
 let searchIndex = [];
+let localities = {};                 // pc -> [village names] (data/localities.json)
 let map, geoLayer;
 
 /* --------------------------------------------------------------- dom refs */
@@ -173,35 +177,60 @@ function syncUI() {
 }
 
 /* -------------------------------------------------------------- search */
+// Accent-folded so "liege" matches "Liège" and "brugge" matches "Brugge".
+const foldText = (s) => String(s == null ? '' : s)
+  .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 function buildSearchIndex() {
   searchIndex = [];
   for (const [pc, m] of metaByPostcode) {
-    searchIndex.push({ pc, nl: (m.nl || '').toLowerCase(), fr: (m.fr || '').toLowerCase() });
+    const aliases = localities[pc] || [];        // village names within this postcode
+    searchIndex.push({
+      pc,
+      nl: foldText(m.nl), fr: foldText(m.fr),
+      aliases, aliasNorm: aliases.map(foldText)
+    });
   }
   searchIndex.sort((a, b) => byCode(a.pc, b.pc));
 }
+
+// Ranked so the obvious hit wins: without this an alias containing the query
+// ("ArGENTeau" for "gent") could outrank the town itself, since ties fall back
+// to ascending postcode.
 function onSearchInput() {
-  const q = els.search.value.trim().toLowerCase();
-  els.searchClear.hidden = q === '';
+  const raw = els.search.value.trim();
+  els.searchClear.hidden = raw === '';
+  const q = foldText(raw);
   if (!q) { hideResults(); return; }
-  const res = [];
+  const hits = [];
   for (const item of searchIndex) {
-    if (item.pc.startsWith(q) || item.nl.includes(q) || item.fr.includes(q)) {
-      res.push(item);
-      if (res.length >= 20) break;
+    let score = -1, alias = null, i;
+    if (item.pc === q) score = 0;                                        // exact postcode
+    else if (item.pc.startsWith(q)) score = 1;                           // postcode prefix
+    else if (item.nl.startsWith(q) || item.fr.startsWith(q)) score = 2;  // town starts with
+    else if ((i = item.aliasNorm.findIndex((a) => a.startsWith(q))) >= 0) {
+      score = 3; alias = item.aliases[i];                                // village starts with
+    } else if (item.nl.includes(q) || item.fr.includes(q)) score = 4;    // town contains
+    else if ((i = item.aliasNorm.findIndex((a) => a.includes(q))) >= 0) {
+      score = 5; alias = item.aliases[i];                                // village contains
     }
+    if (score >= 0) hits.push({ pc: item.pc, alias, score });
   }
-  showResults(res);
+  hits.sort((a, b) => a.score - b.score || byCode(a.pc, b.pc));
+  showResults(hits.slice(0, 20));
 }
 function showResults(res) {
   els.searchResults.textContent = '';
   if (!res.length) { els.searchResults.hidden = true; return; }
-  for (const item of res) {
+  for (const hit of res) {
     const li = document.createElement('li');
-    const pc = document.createElement('span'); pc.className = 'pc tabular'; pc.textContent = item.pc;
-    const mun = document.createElement('span'); mun.className = 'mun'; mun.textContent = munLabel(item.pc);
+    const pc = document.createElement('span'); pc.className = 'pc tabular'; pc.textContent = hit.pc;
+    const mun = document.createElement('span'); mun.className = 'mun';
+    const town = munLabel(hit.pc);
+    // Matched via a village name → show it, so "Maransart" explains why 1380 is here.
+    mun.textContent = hit.alias ? (town ? `${hit.alias} · ${town}` : hit.alias) : town;
     li.append(pc, mun);
-    li.addEventListener('click', () => jumpTo(item.pc));
+    li.addEventListener('click', () => jumpTo(hit.pc));
     els.searchResults.append(li);
   }
   els.searchResults.hidden = false;
@@ -367,11 +396,11 @@ function mkBtn(label, cls, onClick) {
   b.textContent = label; if (onClick) b.addEventListener('click', onClick); return b;
 }
 
-function confirmDialog(message, confirmLabel, onConfirm, danger) {
+function confirmDialog(message, confirmLabel, onConfirm, danger, onCancel) {
   const { modal, body, actions } = modalShell(message);
   body.remove(); // message lives in the title for a compact confirm
   actions.append(
-    mkBtn(t('cancel'), '', closeModal),
+    mkBtn(t('cancel'), '', () => { closeModal(); if (onCancel) onCancel(); }),
     mkBtn(confirmLabel, danger ? 'btn-danger' : 'btn-primary', () => { closeModal(); onConfirm(); })
   );
   openModal(modal);
@@ -423,7 +452,7 @@ function openSaved() {
   const { modal, body, actions } = modalShell(t('saved_list_title'));
   const records = loadSaved();
   if (!records.length) {
-    const p = document.createElement('p'); p.className = 'saved-empty'; p.textContent = t('empty_hint');
+    const p = document.createElement('p'); p.className = 'saved-empty'; p.textContent = t('no_saved');
     body.append(p);
   } else {
     const ul = document.createElement('ul'); ul.className = 'saved-list';
@@ -441,7 +470,7 @@ function openSaved() {
           closeModal();
         }),
         mkBtn(t('rename'), '', () => renameSaved(rec.id)),
-        mkBtn(t('delete'), 'btn-danger', () => { writeSaved(loadSaved().filter((r) => r.id !== rec.id)); openSaved(); })
+        mkBtn(t('delete'), 'btn-danger', () => deleteSaved(rec))
       );
       li.append(title, meta, rowActions);
       ul.append(li);
@@ -452,6 +481,26 @@ function openSaved() {
   actions.append(mkBtn(t('cancel'), '', closeModal));
   openModal(modal);
 }
+// Deleting a saved selection is destructive and was previously instant — it now
+// confirms, and the toast offers an Undo that puts the record back where it was.
+function deleteSaved(rec) {
+  confirmDialog(t('delete_confirm'), t('delete'), () => {
+    const before = loadSaved();
+    const at = before.findIndex((r) => r.id === rec.id);
+    writeSaved(before.filter((r) => r.id !== rec.id));
+    openSaved();
+    showToast(t('deleted'), 'info', {
+      label: t('undo'),
+      onClick: () => {
+        const arr = loadSaved();
+        arr.splice(at < 0 ? 0 : Math.min(at, arr.length), 0, rec);
+        writeSaved(arr);
+        openSaved();
+      }
+    });
+  }, true, openSaved);   // cancel returns to the Saved list
+}
+
 function renameSaved(id) {
   const records = loadSaved();
   const rec = records.find((r) => r.id === id);
@@ -469,7 +518,7 @@ function renameSaved(id) {
 function doSave() {
   if (!selected.length) return;
   const arr = loadSaved();
-  arr.unshift({ id: genId(), name: els.name.value.trim() || t('name_placeholder'), date: els.date.value || today(), postcodes: sortedSelection() });
+  arr.unshift({ id: genId(), name: els.name.value.trim() || '—', date: els.date.value || today(), postcodes: sortedSelection() });
   writeSaved(arr);
   showToast(t('saved'), 'info');
 }
@@ -526,10 +575,10 @@ function initSheet() {
   };
   const move = (e) => {
     if (!dragging) return;
-    const y = point(e), t = now(), dt = t - lastT;
+    const y = point(e), tNow = now(), dt = tNow - lastT;   // not `t` — that's the i18n fn
     moved = Math.abs(y - startY);
     if (dt > 0) vel = (y - lastY) / dt;   // px/ms; negative = moving up
-    lastY = y; lastT = t;
+    lastY = y; lastT = tNow;
     if (moved > 4 && e.cancelable) e.preventDefault();
     panel.style.setProperty('--sheet-y', Math.min(PEEK, Math.max(OPEN, startPct + ((y - startY) / H) * 100)) + '%');
   };
@@ -586,6 +635,14 @@ async function loadData() {
   if (!res.ok) throw new Error('geojson ' + res.status);
   return res.json();
 }
+// Village aliases are an enhancement, never a hard dependency: if this fails,
+// search still works on postcodes and municipality names.
+async function loadLocalities() {
+  try {
+    const res = await fetch('data/localities.json');
+    return res.ok ? await res.json() : {};
+  } catch (_) { return {}; }
+}
 function buildLayer(data) {
   geoLayer = L.geoJSON(data, {
     renderer: L.canvas({ padding: 0.5 }),
@@ -602,6 +659,7 @@ function buildLayer(data) {
   }).addTo(map);
 }
 function initMap() {
+  BE_BOUNDS = L.latLngBounds(BE_BOUNDS_LL);
   map = L.map('map', {
     preferCanvas: true,
     minZoom: 7, maxZoom: 16,
@@ -658,6 +716,11 @@ function wireEvents() {
   els.date.addEventListener('input', autosaveLast);
 
   els.modalRoot.addEventListener('click', (e) => { if (e.target === els.modalRoot) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!els.modalRoot.hidden) { closeModal(); return; }
+    if (!els.searchResults.hidden) { hideResults(); els.search.blur(); }
+  });
 
   window.addEventListener('online', updateOnline);
   window.addEventListener('offline', updateOnline);
@@ -676,6 +739,10 @@ function wireEvents() {
 async function init() {
   resolveInitialLang();
   cacheEls();
+  if (typeof L === 'undefined') {          // bundled Leaflet missing/blocked
+    showToast('Map library failed to load', 'warn');
+    return;
+  }
   els.date.value = today();
   initMap();
   wireEvents();
@@ -684,8 +751,9 @@ async function init() {
   applyI18n();
 
   try {
-    const data = await loadData();
+    const [data, locs] = await Promise.all([loadData(), loadLocalities()]);
     buildLayer(data);
+    localities = locs;
     buildSearchIndex();
     restoreLast();
     syncUI();

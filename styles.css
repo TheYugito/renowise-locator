@@ -312,7 +312,9 @@ button { cursor: pointer; }
 
 /* ---------- Toast (cap-reached etc.) ---------- */
 .toast {
-  position: fixed; z-index: 1500;
+  /* above .modal-root (1600): the Saved-delete Undo toast shows while the
+     Saved sheet is open, and must stay tappable. */
+  position: fixed; z-index: 1700;
   left: 50%; bottom: calc(30px + var(--safe-bottom));
   transform: translateX(-50%);
   display: flex; align-items: center; gap: 14px;
