@@ -26,7 +26,6 @@ const STYLE_UNSELECTED = { color: '#0B2447', weight: 0.6, opacity: 0.35, fill: t
 const STYLE_SELECTED   = { color: '#0B2447', weight: 2,   opacity: 1,    fill: true, fillColor: '#0B2447', fillOpacity: 0.35 };
 const STYLE_HIGHLIGHT  = { color: '#0B2447', weight: 2.5, opacity: 1,    fill: true, fillColor: '#DCE3F1', fillOpacity: 0.55 };
 
-const FLEMISH = new Set(['ANT', 'LIM', 'OVL', 'VBR', 'WVL']);
 const WALLOON = new Set(['WBR', 'HAI', 'LIE', 'LUX', 'NAM']);
 
 /* ------------------------------------------------------------------- state */
@@ -75,7 +74,11 @@ function orderedProvinces(provinces, primary) {
   return primary ? [primary, ...rest] : rest;
 }
 function provinceSummaryText() {
-  const { provinces, primary } = summarizeProvinces(selected);
+  // sortedSelection(), NOT selected: summarizeProvinces breaks a count tie by
+  // input order (Appendix B's comparator returns 0 on ties), so passing tap
+  // order here while the export passes sorted order made the panel and the
+  // exported primary_province disagree for the same selection.
+  const { provinces, primary } = summarizeProvinces(sortedSelection());
   if (!provinces.length) return '—';
   return orderedProvinces(provinces, primary).map((p) => provinceName(p, getLang())).join(', ');
 }
@@ -174,6 +177,7 @@ function renderList() {
 function syncUI() {
   els.counter.textContent = `${selected.length} / ${MAX}`;
   els.counter.classList.toggle('at-cap', selected.length >= MAX);
+  updateCounterLabel();
   els.provincesValue.textContent = provinceSummaryText();
   els.emptyHint.hidden = selected.length > 0;
   if (selected.length && els.firstHint && !els.firstHint.hidden) dismissHint();
@@ -293,25 +297,38 @@ function buildText() {
   const descriptive = selected.map((pc) => `${pc} ${munLabel(pc)}`.trim()).join(', ');
   return `${header}\n${descriptive}\n\nCodes: ${codes.join(', ')}`;
 }
+// Reports what actually happened. It used to toast "Copied to clipboard"
+// unconditionally, so on a plain-http LAN origin (where navigator.clipboard is
+// undefined) the user was told it worked and pasted nothing.
 async function doCopy() {
   const text = buildText();
+  let ok = false;
   try {
-    await navigator.clipboard.writeText(text);
-  } catch (_) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (_) { ok = false; }
+  if (!ok) {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.append(ta); ta.select();
-    try { document.execCommand('copy'); } catch (__) {}
+    try { ok = document.execCommand('copy'); } catch (__) { ok = false; }
     ta.remove();
   }
-  showToast(t('copied'), 'info');
+  showToast(ok ? t('copied') : t('copy_failed'), ok ? 'info' : 'warn');
+  return ok;
 }
 async function doShare() {
   const text = buildText();
-  if (navigator.share) {
-    try { await navigator.share({ text }); } catch (_) {}
-  } else {
-    doCopy();
+  if (!navigator.share) return doCopy();
+  try {
+    await navigator.share({ text });
+  } catch (err) {
+    // A real failure (share unsupported for this payload, gesture chain broken)
+    // used to be swallowed exactly like a user cancel, so the button just did
+    // nothing forever. A cancel is an AbortError and stays silent.
+    if (err && err.name !== 'AbortError') doCopy();
   }
 }
 
@@ -355,7 +372,13 @@ function loadSaved() {
   try { const v = JSON.parse(localStorage.getItem(STORE_SAVED)); return Array.isArray(v) ? v : []; }
   catch (_) { return []; }
 }
-function writeSaved(arr) { localStorage.setItem(STORE_SAVED, JSON.stringify(arr)); }
+// Returns false instead of throwing: an unguarded quota error here escaped the
+// click handler, so Save showed no confirmation and Delete left the sheet in a
+// half-updated state with the record still on disk.
+function writeSaved(arr) {
+  try { localStorage.setItem(STORE_SAVED, JSON.stringify(arr)); return true; }
+  catch (_) { return false; }
+}
 function autosaveLast() {
   try { localStorage.setItem(STORE_LAST, JSON.stringify({ name: els.name.value, date: els.date.value, postcodes: [...selected] })); }
   catch (_) {}
@@ -368,26 +391,43 @@ function restoreLast() {
   if (last.date) els.date.value = last.date;
   if (Array.isArray(last.postcodes)) applySelection(last.postcodes);
 }
+// Returns how many codes were dropped (unknown postcode, or over the limit) so
+// callers can say so — loading a 30-postcode record under a limit of 10 used to
+// silently keep 10 and discard 20 with no indication at all.
 function applySelection(codes) {
   for (const pc of [...selected]) { removeLabel(pc); }
   selected.length = 0;
+  let dropped = 0;
   for (const raw of codes) {
     const pc = String(raw);
     if (layersByPostcode.has(pc) && !selected.includes(pc) && selected.length < MAX) {
       selected.push(pc); addLabel(pc);
+    } else if (!selected.includes(pc)) {
+      dropped++;
     }
   }
   for (const [pc] of layersByPostcode) restyle(pc);
   syncUI();
+  return dropped;
 }
 
 /* --------------------------------------------------------------- modals */
-function openModal(node) {
+// Escape and backdrop-click used to call closeModal() directly, skipping the
+// dialog's own cancel path — so dismissing a nested confirm (Saved… → Delete)
+// closed everything instead of returning to the list the Cancel button does.
+let modalDismiss = null;
+function openModal(node, onDismiss) {
   els.modalRoot.textContent = '';
   els.modalRoot.append(node);
   els.modalRoot.hidden = false;
+  modalDismiss = onDismiss || null;
 }
-function closeModal() { els.modalRoot.hidden = true; els.modalRoot.textContent = ''; }
+function closeModal() { els.modalRoot.hidden = true; els.modalRoot.textContent = ''; modalDismiss = null; }
+function dismissModal() {
+  const after = modalDismiss;
+  closeModal();
+  if (after) after();
+}
 function modalShell(titleText) {
   const modal = document.createElement('div'); modal.className = 'modal';
   const h = document.createElement('h2'); h.textContent = titleText;
@@ -408,7 +448,7 @@ function confirmDialog(message, confirmLabel, onConfirm, danger, onCancel) {
     mkBtn(t('cancel'), '', () => { closeModal(); if (onCancel) onCancel(); }),
     mkBtn(confirmLabel, danger ? 'btn-danger' : 'btn-primary', () => { closeModal(); onConfirm(); })
   );
-  openModal(modal);
+  openModal(modal, onCancel);
 }
 
 function doReset() {
@@ -472,8 +512,11 @@ function openSaved() {
         mkBtn(t('load'), 'btn-primary', () => {
           els.name.value = rec.name || '';
           els.date.value = rec.date || today();
-          applySelection(rec.postcodes);
+          const dropped = applySelection(rec.postcodes || []);
           closeModal();
+          // a record saved under a higher limit would otherwise load partially
+          // and silently — the user would never know postcodes went missing
+          if (dropped) showToast(t('some_dropped', { n: dropped }), 'warn');
         }),
         mkBtn(t('rename'), '', () => renameSaved(rec.id)),
         mkBtn(t('delete'), 'btn-danger', () => deleteSaved(rec))
@@ -493,15 +536,17 @@ function deleteSaved(rec) {
   confirmDialog(t('delete_confirm'), t('delete'), () => {
     const before = loadSaved();
     const at = before.findIndex((r) => r.id === rec.id);
-    writeSaved(before.filter((r) => r.id !== rec.id));
+    const ok = writeSaved(before.filter((r) => r.id !== rec.id));
     openSaved();
+    if (!ok) { showToast(t('save_failed'), 'warn'); return; }   // nothing was deleted
     showToast(t('deleted'), 'info', {
       label: t('undo'),
       onClick: () => {
         const arr = loadSaved();
         arr.splice(at < 0 ? 0 : Math.min(at, arr.length), 0, rec);
-        writeSaved(arr);
+        const back = writeSaved(arr);
         openSaved();
+        if (!back) showToast(t('save_failed'), 'warn');
       }
     });
   }, true, openSaved);   // cancel returns to the Saved list
@@ -525,23 +570,42 @@ function doSave() {
   if (!selected.length) return;
   const arr = loadSaved();
   arr.unshift({ id: genId(), name: els.name.value.trim() || '—', date: els.date.value || today(), postcodes: sortedSelection() });
-  writeSaved(arr);
-  showToast(t('saved'), 'info');
+  const ok = writeSaved(arr);
+  showToast(ok ? t('saved') : t('save_failed'), ok ? 'info' : 'warn');
 }
 
 /* ---------------------------------------------------- i18n application */
 function applyI18n() {
   document.documentElement.lang = getLang();
-  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.getAttribute('data-i18n')); });
+  // vars must be passed: first_hint interpolates {max}, and without this it
+  // would render the literal placeholder.
+  const vars = { max: MAX, n: selected.length };
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.getAttribute('data-i18n'), vars); });
   document.querySelectorAll('[data-i18n-attr]').forEach((el) => {
     el.getAttribute('data-i18n-attr').split(';').forEach((pair) => {
       const [attr, key] = pair.split(':');
       if (attr && key) el.setAttribute(attr, t(key));
     });
   });
-  els.langBtns.forEach((b) => b.classList.toggle('active', b.dataset.lang === getLang()));
+  els.langBtns.forEach((b) => {
+    const on = b.dataset.lang === getLang();
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');   // otherwise the choice is invisible to a screen reader
+  });
   els.provincesValue.textContent = provinceSummaryText();
+  // Rows are built imperatively, so their aria-labels kept the old language
+  // until the next selection change.
+  renderList();
+  updateCounterLabel();
   refreshLabels();
+}
+
+// The chip's own text ("3 / 10") is overridden for assistive tech by its
+// aria-label, so the label has to carry the value — this is what Appendix A's
+// `counter` string was for.
+function updateCounterLabel() {
+  els.counter.setAttribute('aria-label', t('counter', { n: selected.length, max: MAX }));
+  els.counter.setAttribute('title', t('max_label'));
 }
 
 /* ------------------------------------------------- portrait bottom sheet */
@@ -607,17 +671,37 @@ function initSheet() {
     }
     snap(target);
   };
+  // A system gesture can interrupt a drag; without this, `dragging` and the
+  // .dragging class stay stuck (killing the transition and leaving the sheet
+  // unselectable) until the next touch on the handle.
+  const cancel = () => {
+    if (!dragging) return;
+    dragging = false; panel.classList.remove('dragging');
+    snap(startPct < PEEK / 2 ? OPEN : PEEK);
+  };
+
+  // iOS fires a compatibility mousedown/mouseup after a tap that nothing called
+  // preventDefault on — and a tap never does, since touchstart is passive and
+  // touchmove only prevents past 4px. The handle is a div[role=button], so the
+  // closest('button') guard in down() doesn't stop it either: the synthesized
+  // pair re-ran the whole tap and toggled the sheet straight back, which made
+  // handle taps look dead. Ignore mouse input that follows a recent touch.
+  let lastTouch = -Infinity;
+  const afterTouch = () => (now() - lastTouch) < 600;
+  const mark = () => { lastTouch = now(); };
+
   for (const surface of [handle, header]) {
-    surface.addEventListener('touchstart', down, { passive: true });
-    surface.addEventListener('touchmove', move, { passive: false });
-    surface.addEventListener('touchend', up);
-    surface.addEventListener('mousedown', down);
+    surface.addEventListener('touchstart', (e) => { mark(); down(e); }, { passive: true });
+    surface.addEventListener('touchmove', (e) => { mark(); move(e); }, { passive: false });
+    surface.addEventListener('touchend', (e) => { mark(); up(e); });
+    surface.addEventListener('touchcancel', () => { mark(); cancel(); });
+    surface.addEventListener('mousedown', (e) => { if (!afterTouch()) down(e); });
   }
   handle.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
   });
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', up);
+  window.addEventListener('mousemove', (e) => { if (!afterTouch()) move(e); });
+  window.addEventListener('mouseup', (e) => { if (!afterTouch()) up(e); });
 }
 function resetSheet() { els.panel.style.removeProperty('--sheet-y'); els.panel.classList.remove('expanded'); }
 
@@ -700,7 +784,14 @@ function openMaxPicker() {
   }
   dec.addEventListener('click', () => set(value - 1));
   inc.addEventListener('click', () => set(value + 1));
-  inp.addEventListener('input', () => { const v = parseInt(inp.value, 10); if (Number.isFinite(v)) set(v); });
+  // Track the typed value without rewriting the field mid-entry: clamping on
+  // every keystroke turned a cleared field + "0" into "1", so the next digit
+  // produced 15 instead of 5. The clamp happens on blur and on Apply.
+  inp.addEventListener('input', () => {
+    const v = parseInt(inp.value, 10);
+    if (Number.isFinite(v)) { value = v; note.textContent = v < selected.length ? t('max_confirm', { max: clampMax(v) }) : ''; }
+  });
+  inp.addEventListener('blur', () => set(value));
   set(value);
 
   body.append(row, presets, note);
@@ -810,10 +901,10 @@ function wireEvents() {
   els.name.addEventListener('input', autosaveLast);
   els.date.addEventListener('input', autosaveLast);
 
-  els.modalRoot.addEventListener('click', (e) => { if (e.target === els.modalRoot) closeModal(); });
+  els.modalRoot.addEventListener('click', (e) => { if (e.target === els.modalRoot) dismissModal(); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!els.modalRoot.hidden) { closeModal(); return; }
+    if (!els.modalRoot.hidden) { dismissModal(); return; }
     if (!els.searchResults.hidden) { hideResults(); els.search.blur(); }
   });
 

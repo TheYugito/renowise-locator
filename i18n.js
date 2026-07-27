@@ -24,13 +24,15 @@ export const STRINGS = {
     offline: "Offline — using cached map",
     undo: "Undo", cleared: "Selection cleared",
     clear_search: "Clear search",
-    first_hint: "Tap postcodes on the map — max 10.",
+    first_hint: "Tap postcodes on the map — max {max}.",
     delete_confirm: "Delete this saved selection?", deleted: "Deleted",
     no_saved: "No saved selections yet.",
     toggle_list: "Expand or collapse the list", dismiss: "Dismiss",
-    max_label: "Max postcodes", max_hint: "Tap the counter to change this.",
+    max_label: "Max postcodes",
     max_confirm: "Keep only the first {max} postcodes?",
-    max_updated: "Limit set to {max}", apply: "Apply"
+    max_updated: "Limit set to {max}", apply: "Apply",
+    copy_failed: "Couldn't copy", some_dropped: "{n} didn't fit the limit",
+    save_failed: "Couldn't save — storage full"
   },
   nl: {
     app_title: "Renowise Locator",
@@ -53,13 +55,15 @@ export const STRINGS = {
     offline: "Offline — opgeslagen kaart",
     undo: "Ongedaan maken", cleared: "Selectie gewist",
     clear_search: "Zoekopdracht wissen",
-    first_hint: "Tik postcodes op de kaart — max. 10.",
+    first_hint: "Tik postcodes op de kaart — max. {max}.",
     delete_confirm: "Deze bewaarde selectie verwijderen?", deleted: "Verwijderd",
     no_saved: "Nog geen bewaarde selecties.",
     toggle_list: "Lijst openen of sluiten", dismiss: "Sluiten",
-    max_label: "Max. postcodes", max_hint: "Tik op de teller om dit te wijzigen.",
+    max_label: "Max. postcodes",
     max_confirm: "Alleen de eerste {max} postcodes behouden?",
-    max_updated: "Limiet op {max} gezet", apply: "Toepassen"
+    max_updated: "Limiet op {max} gezet", apply: "Toepassen",
+    copy_failed: "Kopiëren mislukt", some_dropped: "{n} pasten niet binnen de limiet",
+    save_failed: "Bewaren mislukt — opslag vol"
   },
   fr: {
     app_title: "Renowise Locator",
@@ -82,13 +86,15 @@ export const STRINGS = {
     offline: "Hors ligne — carte en cache",
     undo: "Annuler", cleared: "Sélection effacée",
     clear_search: "Effacer la recherche",
-    first_hint: "Touchez les codes postaux — 10 max.",
+    first_hint: "Touchez les codes postaux — {max} max.",
     delete_confirm: "Supprimer cette sélection enregistrée ?", deleted: "Supprimé",
     no_saved: "Aucune sélection enregistrée.",
     toggle_list: "Ouvrir ou fermer la liste", dismiss: "Fermer",
-    max_label: "Codes postaux max.", max_hint: "Touchez le compteur pour le modifier.",
+    max_label: "Codes postaux max.",
     max_confirm: "Ne garder que les {max} premiers codes postaux ?",
-    max_updated: "Limite fixée à {max}", apply: "Appliquer"
+    max_updated: "Limite fixée à {max}", apply: "Appliquer",
+    copy_failed: "Échec de la copie", some_dropped: "{n} ne rentraient pas dans la limite",
+    save_failed: "Échec de l'enregistrement — stockage plein"
   }
 };
 
@@ -100,7 +106,12 @@ let current = 'en';
 // Resolve the initial UI language: saved choice → iPad locale clamped to the three
 // → EN fallback (mirrors Renowise's resolveNewsLanguage).
 export function resolveInitialLang() {
-  const saved = localStorage.getItem(LANG_KEY);
+  // Guarded: this is the first statement of init(), and merely *reading*
+  // localStorage throws SecurityError in Safari with site data blocked. An
+  // exception here escaped before the map or any error toast existed — the app
+  // just showed a blank screen.
+  let saved = null;
+  try { saved = localStorage.getItem(LANG_KEY); } catch (_) {}
   if (saved && LANGS.includes(saved)) { current = saved; return current; }
   const nav = (navigator.languages && navigator.languages.length)
     ? navigator.languages : [navigator.language || 'en'];
@@ -117,7 +128,7 @@ export function getLang() { return current; }
 export function setLang(lang) {
   if (!LANGS.includes(lang)) return;
   current = lang;
-  localStorage.setItem(LANG_KEY, lang);
+  try { localStorage.setItem(LANG_KEY, lang); } catch (_) {}   // never break the switch
 }
 
 // t('counter', {n:3, max:10}) → "3 / 10 postcodes"

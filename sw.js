@@ -4,10 +4,22 @@
             same-origin → CacheFirst, falling back to network
    Selection works fully offline; only unseen tiles need the network. */
 
-const VERSION = 'v13';
+const VERSION = 'v14';
 const SHELL_CACHE = 'renowise-shell-' + VERSION;
-const TILE_CACHE = 'renowise-tiles-' + VERSION;
+// Deliberately NOT versioned. It used to be 'renowise-tiles-' + VERSION, so every
+// app update threw away up to 1,500 map tiles the operator had cached in the
+// field — update the app, go offline, get a blank grey map. Bump this only if
+// the tile source or scheme changes.
+const TILE_CACHE = 'renowise-tiles-v1';
 const TILE_CAP = 1500;
+
+// Small shell files get stale-while-revalidate so a deploy that forgets to bump
+// VERSION still lands on the next load instead of freezing an install forever
+// (the SW intercepts reloads too, so there is otherwise no way out). The big
+// data/vendor/icon assets stay strictly cache-first — re-fetching a 380 KB
+// GeoJSON on every launch would be wasteful on exactly the flaky connections
+// this app exists for.
+const REVALIDATE = /(^|\/)(index\.html|app\.js|styles\.css|i18n\.js|provinces\.js|manifest\.webmanifest)$|\/$/;
 
 const SHELL_ASSETS = [
   './',
@@ -82,8 +94,13 @@ self.addEventListener('fetch', (event) => {
       try {
         const resp = await fetch(req);
         if (resp && (resp.ok || resp.type === 'opaque')) {
-          await cache.put(req, resp.clone());
-          trimCache(TILE_CACHE, TILE_CAP); // fire-and-forget
+          // Best-effort, and deliberately NOT awaited inside this try: opaque
+          // tiles carry a padded quota cost, and a QuotaExceededError from put()
+          // must not discard a tile the network already delivered (it used to
+          // fall through to the catch below and render as a hole in the map).
+          cache.put(req, resp.clone())
+            .then(() => trimCache(TILE_CACHE, TILE_CAP))
+            .catch(() => {});
         }
         return resp;
       } catch (_) {
@@ -93,23 +110,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin → CacheFirst, fall back to network (and cache navigations/shell).
+  // Same-origin → cache-first for speed and offline; the small shell files also
+  // revalidate in the background so an update can never get permanently stuck.
   if (url.origin === self.location.origin) {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
       const hit = await cache.match(req, { ignoreSearch: false });
-      if (hit) return hit;
+      const refresh = REVALIDATE.test(url.pathname);
+
+      const fromNetwork = (hit && !refresh) ? null : fetch(req)
+        .then((resp) => {
+          if (resp && resp.ok && resp.type === 'basic') cache.put(req, resp.clone()).catch(() => {});
+          return resp;
+        })
+        .catch(() => null);
+
+      if (hit) return hit;                 // instant; any refresh lands next load
+      const resp = await fromNetwork;
+      if (resp) return resp;
       try {
-        const resp = await fetch(req);
-        if (resp && resp.ok && resp.type === 'basic') {
-          cache.put(req, resp.clone());
-        }
-        return resp;
-      } catch (_) {
         if (req.mode === 'navigate') {
           const shell = await cache.match('./index.html');
           if (shell) return shell;
         }
+        return Response.error();
+      } catch (_) {
         return Response.error();
       }
     })());
