@@ -32,7 +32,8 @@ export const STRINGS = {
     max_confirm: "Keep only the first {max} postcodes?",
     max_updated: "Limit set to {max}", apply: "Apply",
     copy_failed: "Couldn't copy", some_dropped: "{n} didn't fit the limit",
-    save_failed: "Couldn't save — storage full"
+    save_failed: "Couldn't save — storage full",
+    add: "Add", map_label: "Map of Belgium", language: "Language"
   },
   nl: {
     app_title: "Renowise Locator",
@@ -63,7 +64,8 @@ export const STRINGS = {
     max_confirm: "Alleen de eerste {max} postcodes behouden?",
     max_updated: "Limiet op {max} gezet", apply: "Toepassen",
     copy_failed: "Kopiëren mislukt", some_dropped: "{n} pasten niet binnen de limiet",
-    save_failed: "Bewaren mislukt — opslag vol"
+    save_failed: "Bewaren mislukt — opslag vol",
+    add: "Toevoegen", map_label: "Kaart van België", language: "Taal"
   },
   fr: {
     app_title: "Renowise Locator",
@@ -94,7 +96,8 @@ export const STRINGS = {
     max_confirm: "Ne garder que les {max} premiers codes postaux ?",
     max_updated: "Limite fixée à {max}", apply: "Appliquer",
     copy_failed: "Échec de la copie", some_dropped: "{n} ne rentraient pas dans la limite",
-    save_failed: "Échec de l'enregistrement — stockage plein"
+    save_failed: "Échec de l'enregistrement — stockage plein",
+    add: "Ajouter", map_label: "Carte de la Belgique", language: "Langue"
   }
 };
 

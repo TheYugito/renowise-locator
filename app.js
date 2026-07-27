@@ -228,23 +228,61 @@ function onSearchInput() {
   hits.sort((a, b) => a.score - b.score || byCode(a.pc, b.pc));
   showResults(hits.slice(0, 20));
 }
+// Each result is two real buttons rather than a clickable <li>. The map draws its
+// polygons to a canvas, so they have no DOM node to focus — before this there was
+// no way to select a postcode at all without a pointer. The second button gives
+// keyboard (and screen-reader) users an add/remove path, while the first keeps the
+// PRD's behaviour that searching only pans, never auto-selects.
 function showResults(res) {
   els.searchResults.textContent = '';
-  if (!res.length) { els.searchResults.hidden = true; return; }
+  if (!res.length) {
+    els.searchResults.hidden = true;
+    els.search.setAttribute('aria-expanded', 'false');
+    return;
+  }
   for (const hit of res) {
     const li = document.createElement('li');
+
+    const go = document.createElement('button');
+    go.type = 'button'; go.className = 'result-go';
     const pc = document.createElement('span'); pc.className = 'pc tabular'; pc.textContent = hit.pc;
     const mun = document.createElement('span'); mun.className = 'mun';
     const town = munLabel(hit.pc);
     // Matched via a village name → show it, so "Maransart" explains why 1380 is here.
     mun.textContent = hit.alias ? (town ? `${hit.alias} · ${town}` : hit.alias) : town;
-    li.append(pc, mun);
-    li.addEventListener('click', () => jumpTo(hit.pc));
+    go.append(pc, mun);
+    go.addEventListener('click', () => jumpTo(hit.pc));
+
+    const on = selected.includes(hit.pc);
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'result-add' + (on ? ' on' : '');
+    add.textContent = on ? '−' : '+';
+    add.setAttribute('aria-label', `${on ? t('remove') : t('add')} ${hit.pc}`);
+    // Update this button in place rather than re-rendering the list: rebuilding
+    // detaches the very node being clicked, and the document-level
+    // "click outside closes the results" handler then sees a detached target
+    // whose closest('.search-wrap') is null — and closed the list every time.
+    add.addEventListener('click', () => {
+      const before = selected.length;
+      toggle(hit.pc);
+      if (selected.length === before) return;            // rejected by the cap
+      const nowOn = selected.includes(hit.pc);
+      add.classList.toggle('on', nowOn);
+      add.textContent = nowOn ? '−' : '+';
+      add.setAttribute('aria-label', `${nowOn ? t('remove') : t('add')} ${hit.pc}`);
+    });
+
+    li.append(go, add);
     els.searchResults.append(li);
   }
   els.searchResults.hidden = false;
+  els.search.setAttribute('aria-expanded', 'true');
 }
-function hideResults() { els.searchResults.hidden = true; els.searchResults.textContent = ''; }
+function hideResults() {
+  els.searchResults.hidden = true;
+  els.searchResults.textContent = '';
+  els.search.setAttribute('aria-expanded', 'false');
+}
 function jumpTo(pc) {
   const ls = layersByPostcode.get(pc);
   if (ls && ls.length) {
@@ -416,13 +454,45 @@ function applySelection(codes) {
 // dialog's own cancel path — so dismissing a nested confirm (Saved… → Delete)
 // closed everything instead of returning to the list the Cancel button does.
 let modalDismiss = null;
+let modalReturnFocus = null;
+let modalTitleSeq = 0;
+
 function openModal(node, onDismiss) {
+  // Only remember the outside element on the *first* open: a nested dialog
+  // (Saved… → Delete) replaces the root's contents, so capturing again would
+  // store a node that is about to be detached and focus would land on <body>.
+  if (els.modalRoot.hidden) modalReturnFocus = document.activeElement;
   els.modalRoot.textContent = '';
   els.modalRoot.append(node);
   els.modalRoot.hidden = false;
   modalDismiss = onDismiss || null;
+
+  els.modalRoot.setAttribute('role', 'dialog');
+  els.modalRoot.setAttribute('aria-modal', 'true');
+  const h = node.querySelector('h2');
+  if (h) {
+    if (!h.id) h.id = 'modal-title-' + (++modalTitleSeq);
+    els.modalRoot.setAttribute('aria-labelledby', h.id);
+  } else {
+    els.modalRoot.removeAttribute('aria-labelledby');
+  }
+  const first = node.querySelector('input, button');
+  if (first) setTimeout(() => first.focus(), 0);
 }
-function closeModal() { els.modalRoot.hidden = true; els.modalRoot.textContent = ''; modalDismiss = null; }
+
+function closeModal() {
+  els.modalRoot.hidden = true;
+  els.modalRoot.textContent = '';
+  modalDismiss = null;
+  els.modalRoot.removeAttribute('aria-labelledby');
+  const back = modalReturnFocus;
+  modalReturnFocus = null;
+  if (back && back.isConnected && typeof back.focus === 'function') back.focus();
+}
+
+const focusablesIn = (root) =>
+  [...root.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => !el.disabled && el.offsetParent !== null);
 function dismissModal() {
   const after = modalDismiss;
   closeModal();
@@ -814,10 +884,16 @@ function dismissHint() {
 }
 
 /* ---------------------------------------------------------------- init */
+// Shipped as TopoJSON: adjacent postcode areas share their borders instead of
+// each storing a duplicate copy, which cuts the download from ~380 KB to ~164 KB
+// gzipped. Decoded to GeoJSON here, so everything downstream is unchanged.
 async function loadData() {
-  const res = await fetch('data/be_postcodes.geojson');
-  if (!res.ok) throw new Error('geojson ' + res.status);
-  return res.json();
+  const res = await fetch('data/be_postcodes.topojson');
+  if (!res.ok) throw new Error('topojson ' + res.status);
+  const topo = await res.json();
+  const obj = topo.objects && topo.objects.be_postcodes;
+  if (!obj || typeof topojson === 'undefined') throw new Error('topojson decode unavailable');
+  return topojson.feature(topo, obj);
 }
 // Village aliases are an enhancement, never a hard dependency: if this fails,
 // search still works on postcodes and municipality names.
@@ -891,6 +967,30 @@ function wireEvents() {
   els.searchClear.addEventListener('click', () => {
     els.search.value = ''; hideResults(); els.searchClear.hidden = true; els.search.focus();
   });
+
+  // Keyboard path into the results: ↓ from the field, ↑/↓ between rows, Enter on
+  // the field activates the first hit.
+  const resultButtons = () => [...els.searchResults.querySelectorAll('.result-go, .result-add')];
+  els.search.addEventListener('keydown', (e) => {
+    if (els.searchResults.hidden) return;
+    if (e.key === 'ArrowDown') {
+      const first = els.searchResults.querySelector('.result-go');
+      if (first) { e.preventDefault(); first.focus(); }
+    } else if (e.key === 'Enter') {
+      const first = els.searchResults.querySelector('.result-go');
+      if (first) { e.preventDefault(); first.click(); }
+    }
+  });
+  els.searchResults.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const btns = resultButtons();
+    const i = btns.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next = e.key === 'ArrowDown' ? i + 1 : i - 1;
+    if (next < 0) els.search.focus();
+    else if (btns[next]) btns[next].focus();
+  });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-wrap')) hideResults();
   });
@@ -902,6 +1002,16 @@ function wireEvents() {
   els.date.addEventListener('input', autosaveLast);
 
   els.modalRoot.addEventListener('click', (e) => { if (e.target === els.modalRoot) dismissModal(); });
+  // Keep Tab inside the dialog — it used to walk into the buttons behind the
+  // overlay and activate them.
+  els.modalRoot.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab' || els.modalRoot.hidden) return;
+    const f = focusablesIn(els.modalRoot);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!els.modalRoot.hidden) { dismissModal(); return; }

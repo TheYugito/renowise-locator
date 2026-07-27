@@ -4,7 +4,7 @@
             same-origin → CacheFirst, falling back to network
    Selection works fully offline; only unseen tiles need the network. */
 
-const VERSION = 'v14';
+const VERSION = 'v16';
 const SHELL_CACHE = 'renowise-shell-' + VERSION;
 // Deliberately NOT versioned. It used to be 'renowise-tiles-' + VERSION, so every
 // app update threw away up to 1,500 map tiles the operator had cached in the
@@ -29,10 +29,11 @@ const SHELL_ASSETS = [
   './i18n.js',
   './provinces.js',
   './manifest.webmanifest',
-  './data/be_postcodes.geojson',
+  './data/be_postcodes.topojson',
   './data/localities.json',
   './vendor/leaflet.js',
   './vendor/leaflet.css',
+  './vendor/topojson-client.min.js',
   './vendor/images/marker-icon.png',
   './vendor/images/marker-icon-2x.png',
   './vendor/images/marker-shadow.png',

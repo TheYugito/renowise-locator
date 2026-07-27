@@ -112,14 +112,30 @@ button { cursor: pointer; }
   max-height: 46vh; overflow-y: auto;
   z-index: 1300;
 }
-.search-results li {
-  padding: 10px 12px; border-radius: 8px;
+/* Each row is [jump button][add/remove button] so results are keyboard- and
+   screen-reader-operable; the map's canvas polygons cannot be focused. */
+.search-results li { display: flex; align-items: stretch; gap: 6px; }
+.result-go {
+  flex: 1 1 auto; min-width: 0; min-height: var(--tap);
   display: flex; gap: 10px; align-items: baseline;
-  min-height: var(--tap);
+  padding: 10px 12px; border: none; border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; text-align: left;
 }
-.search-results li:hover, .search-results li.active { background: var(--periwinkle); }
+.result-go:hover, .result-go:focus-visible { background: var(--periwinkle); }
+.result-add {
+  flex: 0 0 auto; width: 40px; min-height: var(--tap);
+  border: 1px solid var(--line-strong); border-radius: 8px;
+  background: #fff; color: var(--navy);
+  font-size: 20px; font-weight: 700; line-height: 1;
+}
+.result-add.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.result-add:hover, .result-add:focus-visible { background: var(--periwinkle); color: var(--navy); }
 .search-results .pc { font-weight: 700; font-variant-numeric: tabular-nums; }
-.search-results .mun { color: var(--muted); }
+.search-results .mun { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Visible focus everywhere — the app is otherwise entirely pointer-driven. */
+:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+#topbar :focus-visible { outline-color: var(--ivory); }
 
 .icon-btn {
   flex: 0 0 auto;
