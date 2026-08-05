@@ -1,2 +1,13 @@
 .DS_Store
+
+# Build intermediate — the shipped map data is data/be_postcodes.topojson
 data/be_postcodes.geojson
+
+# Internal, NOT for publication. The GitHub repo is public and the app source now
+# shares this folder with the specs, so without these a plain `git add -A` would
+# push the PRD and the internal guidance to a public repo — irreversibly, since
+# git history is public forever.
+renowise_locator_prd.md
+renowise_locator_build_prompt.md
+CLAUDE.md
+.claude/
