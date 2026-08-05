@@ -536,3 +536,73 @@ button { cursor: pointer; }
   .panel, .lang-thumb, .counter, .btn { transition: none; }
   .toast, .modal, .modal-root, .sel-row { animation: none; }
 }
+
+/* ---------- Screenshot / print summary ---------- */
+.summary-root {
+  position: fixed; inset: 0; z-index: 1800;
+  background: var(--cream);
+  display: flex; flex-direction: column;
+  padding: max(18px, var(--safe-top)) max(18px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(18px, var(--safe-left));
+  overflow-y: auto;
+}
+.summary-card {
+  flex: 1 1 auto;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.summary-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  border-bottom: 2px solid var(--navy); padding-bottom: 12px; }
+.summary-name { margin: 0; flex: 1 1 auto; font-size: 26px; font-weight: 700; color: var(--navy); line-height: 1.15; }
+.summary-meta { display: flex; align-items: baseline; gap: 12px; flex: 0 0 auto; }
+.summary-date { font-size: 16px; color: var(--muted); }
+.summary-count {
+  font-size: 16px; font-weight: 700; color: var(--navy);
+  background: var(--periwinkle); border-radius: 999px; padding: 4px 12px;
+}
+.summary-prov { font-size: 15px; color: var(--ink); }
+.summary-prov-label { font-weight: 700; color: var(--muted); }
+.summary-prov-label::after { content: ':'; margin-right: 5px; }
+
+.summary-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* Two columns only where there is genuinely room: on a phone the second column
+   squeezed the municipality name down to a single letter, which is worse than
+   scrolling. Print always has the width (see the print block). */
+@media (min-width: 620px) {
+  .summary-list.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 20px; }
+}
+/* Long lists get tighter rows so more fits in one screenshot. */
+.summary-list.two-col li { padding: 5px 10px; }
+.summary-list.two-col .mun { font-size: 14px; }
+.summary-list li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 10px; border-radius: 8px; background: rgba(220,227,241,.45);
+}
+.summary-list .pc { font-weight: 700; font-size: 16px; color: var(--navy); min-width: 48px; }
+.summary-list .mun { flex: 1 1 auto; color: #4a5160; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.summary-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+
+.summary-actions { flex: 0 0 auto; display: flex; gap: 10px; justify-content: flex-end; padding-top: 14px; }
+.summary-actions .btn { min-width: 120px; }
+
+/* Printing emits exactly the card — no app chrome, no buttons. The browser's own
+   "Save as PDF" then produces the document, so no PDF library is needed. */
+@media print {
+  @page { margin: 14mm; }
+  #app, #modal-root, .summary-actions, .offline-chip, .toast, .first-hint { display: none !important; }
+  html, body { height: auto; overflow: visible; background: #fff; }
+  .summary-root {
+    position: static; inset: auto; padding: 0; overflow: visible;
+    background: #fff; display: block;
+  }
+  .summary-card { border: none; box-shadow: none; padding: 0; background: #fff; }
+  .summary-list li { background: transparent; border-bottom: 1px solid #e4e7ee; border-radius: 0; padding: 5px 0; }
+  .summary-count { background: transparent; padding: 0; }
+  .prov-chip { border-color: #b9c2d6; }
+  .summary-list.two-col { gap: 0 18px; }
+}

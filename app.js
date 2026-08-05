@@ -540,6 +540,74 @@ function doReset() {
   }, true);
 }
 
+/* ------------------------------------------------- screenshot / print view */
+// A clean full-screen card — name, date, count, provinces, list — with no map
+// and no chrome. Screenshot it, or hit Print: the same view is what @media print
+// emits, so "Save as PDF" in the print dialog produces the document. No PDF
+// library, which would cost ~100 KB for worse typography than the browser's own.
+let summaryReturnFocus = null;
+
+function openSummary() {
+  const root = els.summaryRoot;
+  root.textContent = '';
+
+  const card = document.createElement('div'); card.className = 'summary-card';
+
+  const head = document.createElement('div'); head.className = 'summary-head';
+  const name = document.createElement('h1'); name.className = 'summary-name';
+  name.textContent = els.name.value.trim() || '—';
+  const meta = document.createElement('div'); meta.className = 'summary-meta';
+  const date = document.createElement('span'); date.className = 'summary-date tabular';
+  date.textContent = els.date.value || today();
+  const count = document.createElement('span'); count.className = 'summary-count tabular';
+  count.textContent = `${selected.length} / ${MAX}`;
+  meta.append(date, count);
+  head.append(name, meta);
+
+  const prov = document.createElement('div'); prov.className = 'summary-prov';
+  const provLabel = document.createElement('span'); provLabel.className = 'summary-prov-label';
+  provLabel.textContent = t('provinces_label');
+  const provVal = document.createElement('span');
+  provVal.textContent = provinceSummaryText();
+  prov.append(provLabel, provVal);
+
+  const list = document.createElement('ul'); list.className = 'summary-list';
+  for (const pc of sortedSelection()) {
+    const li = document.createElement('li');
+    const code = document.createElement('span'); code.className = 'pc tabular'; code.textContent = pc;
+    const mun = document.createElement('span'); mun.className = 'mun'; mun.textContent = munLabel(pc);
+    const chip = document.createElement('span'); chip.className = 'prov-chip';
+    chip.textContent = (metaByPostcode.get(pc) || {}).province || provinceForPostcode(pc) || '';
+    li.append(code, mun, chip);
+    list.append(li);
+  }
+  // Two columns once the list is long, so it still fits one screen / one page.
+  if (selected.length > 12) list.classList.add('two-col');
+
+  const foot = document.createElement('div'); foot.className = 'summary-foot';
+  foot.textContent = t('generated');
+
+  const bar = document.createElement('div'); bar.className = 'summary-actions';
+  bar.append(
+    mkBtn(t('print'), 'btn-primary', () => window.print()),
+    mkBtn(t('cancel'), '', closeSummary)
+  );
+
+  card.append(head, prov, list, foot);
+  root.append(card, bar);
+  root.hidden = false;
+  summaryReturnFocus = document.activeElement;
+  setTimeout(() => { const b = bar.querySelector('button'); if (b) b.focus(); }, 0);
+}
+
+function closeSummary() {
+  els.summaryRoot.hidden = true;
+  els.summaryRoot.textContent = '';
+  const back = summaryReturnFocus;
+  summaryReturnFocus = null;
+  if (back && back.isConnected && typeof back.focus === 'function') back.focus();
+}
+
 function doExport() {
   if (!selected.length) return;
   const { modal, body, actions } = modalShell(t('export'));
@@ -559,7 +627,10 @@ function doExport() {
     pre.textContent = content;
     block.append(row, pre); body.append(block);
   }
-  actions.append(mkBtn(t('cancel'), '', closeModal));
+  actions.append(
+    mkBtn(t('summary'), 'btn-primary', () => { closeModal(); openSummary(); }),
+    mkBtn(t('cancel'), '', closeModal)
+  );
   openModal(modal);
 }
 
@@ -945,6 +1016,7 @@ function cacheEls() {
     list: $('#list'), emptyHint: $('#empty-hint'),
     search: $('#search'), searchResults: $('#search-results'), searchClear: $('#search-clear'),
     toast: $('#toast'), offlineChip: $('#offline-chip'), modalRoot: $('#modal-root'),
+    summaryRoot: $('#summary-root'),
     firstHint: $('#first-hint'),
     langBtns: Array.from(document.querySelectorAll('.lang-btn'))
   });
@@ -1014,6 +1086,7 @@ function wireEvents() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (!els.summaryRoot.hidden) { closeSummary(); return; }
     if (!els.modalRoot.hidden) { dismissModal(); return; }
     if (!els.searchResults.hidden) { hideResults(); els.search.blur(); }
   });

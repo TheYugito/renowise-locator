@@ -33,7 +33,8 @@ export const STRINGS = {
     max_updated: "Limit set to {max}", apply: "Apply",
     copy_failed: "Couldn't copy", some_dropped: "{n} didn't fit the limit",
     save_failed: "Couldn't save — storage full",
-    add: "Add", map_label: "Map of Belgium", language: "Language"
+    add: "Add", map_label: "Map of Belgium", language: "Language",
+    summary: "Summary", print: "Print / PDF", generated: "Renowise Locator"
   },
   nl: {
     app_title: "Renowise Locator",
@@ -65,7 +66,8 @@ export const STRINGS = {
     max_updated: "Limiet op {max} gezet", apply: "Toepassen",
     copy_failed: "Kopiëren mislukt", some_dropped: "{n} pasten niet binnen de limiet",
     save_failed: "Bewaren mislukt — opslag vol",
-    add: "Toevoegen", map_label: "Kaart van België", language: "Taal"
+    add: "Toevoegen", map_label: "Kaart van België", language: "Taal",
+    summary: "Overzicht", print: "Afdrukken / PDF", generated: "Renowise Locator"
   },
   fr: {
     app_title: "Renowise Locator",
@@ -97,7 +99,8 @@ export const STRINGS = {
     max_updated: "Limite fixée à {max}", apply: "Appliquer",
     copy_failed: "Échec de la copie", some_dropped: "{n} ne rentraient pas dans la limite",
     save_failed: "Échec de l'enregistrement — stockage plein",
-    add: "Ajouter", map_label: "Carte de la Belgique", language: "Langue"
+    add: "Ajouter", map_label: "Carte de la Belgique", language: "Langue",
+    summary: "Résumé", print: "Imprimer / PDF", generated: "Renowise Locator"
   }
 };
 
